@@ -40,7 +40,7 @@ function get_top_ten_listings($api) {
 
 function listing_img_tag($listing) {
   $photos = $listing['StandardFields']['Photos'];
-  if (sizeof($photos) > 0) {
+  if (count($photos) > 0) {
     return "<img src='".$photos[0]['UriThumb']."'>";
   }
   else {
@@ -49,16 +49,16 @@ function listing_img_tag($listing) {
 }
 
 function listing_info($listing) {
-  $sf = $listing["StandardFields"];
+  $sf = $listing['StandardFields'];
   $html_str = "<dl style='margin-top:0px;'>" .
-                "<dt>$" .$sf['ListPrice'] . " " . $sf['BedsTotal'] . 
-                " beds, " . $sf['BathsTotal'] . "baths</dt>" .
+                "<dt>$" . number_format($sf['ListPrice']) . " " . $sf['BedsTotal'] . 
+                " beds, " . $sf['BathsTotal'] . " baths</dt>" .
                 "<dd>" . $sf['StreetNumber'] . " " . $sf['StreetName'] . " " .
                 $sf['StreetSuffix'] . "</dd>" .
-                "<dd>".$sf['City'] . ", " .  $sf['StateOrProvince']."</dd>".
+                "<dd>" . $sf['City'] . ", " . $sf['StateOrProvince'] . "</dd>".
               "</dl>";
   return $html_str;
 
 }
 
-?>
+

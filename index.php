@@ -39,9 +39,9 @@
 <div class="row-fluid show-grid">
   <div class="span12">
     <div style="float:left;height:50px;margin-right:10px;width:65px;">
-      <?php print_r(listing_img_tag($listing)); ?>
+      <?php echo(listing_img_tag($listing)); ?>
     </div>
-    <?php print_r(listing_info($listing)); ?>
+    <?php echo(listing_info($listing)); ?>
   </div>
 </div>
 <?php } ?>
