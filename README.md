@@ -18,8 +18,10 @@ Configuration
 
 In order for this example application to function, you'll need to supply your OAuth 2 Client Key, OAuth 2 Client Secret, and OAuth 2 Client Redirect URI in sparkle_functions.php:
 
-  $GLOBALS['client_id']     = "<YOUR OAUTH2 CLIENT KEY>";
-  $GLOBALS['client_secret'] = "<YOUR OAUTH2 CLIENT SECRET>";
-  $GLOBALS['redirect_uri']  = "<THE URL TO callback.php>";
+    $GLOBALS['client_id']     = "<YOUR OAUTH2 CLIENT KEY>";
+
+    $GLOBALS['client_secret'] = "<YOUR OAUTH2 CLIENT SECRET>";
+
+    $GLOBALS['redirect_uri']  = "<THE URL TO callback.php>";
 
 From there, visit index.php on whatever host you are running these PHP scripts from to see the application in action.
