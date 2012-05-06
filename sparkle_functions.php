@@ -6,9 +6,10 @@ $GLOBALS['client_id']     = "<YOUR OAUTH2 CLIENT KEY>";
 $GLOBALS['client_secret'] = "<YOUR OAUTH2 CLIENT SECRET>";
 $GLOBALS['redirect_uri']  = "<THE URL TO callback.php>";
 
-$GLOBALS['cache_expire_seconds'] = 300;
-
 $api = new SparkAPI_OAuth($GLOBALS['client_id'], $GLOBALS['client_secret'], $GLOBALS['redirect_uri']);
+
+// Let's identify our new application.
+$api->SetApplicationName("PHP-APP-In-Fifteen-Minutes/1.0");
 
 function oauth2_endpoint_uri() {
   return "https://sparkplatform.com/oauth2?response_type=code&client_id=".
@@ -16,24 +17,25 @@ function oauth2_endpoint_uri() {
 }
 
 function get_user_name($api) {
-  if ($_SESSION['name'] == '' || true) {
+  if ($_SESSION['name'] == '') {
     $account_information = $api->GetMyAccount();
+
+    /* 
+      Let's store this value in $_SESSION.  Caching data locally that doesn't
+      change frequently greatly increases our application's overall speed.
+     */
     $_SESSION['name']   = $account_information['Name'];
   }
   return $_SESSION['name'];
 }
 
 function get_top_ten_listings($api) {
-  if ($_SESSION['last_listing_retrieval'] == '' ||
-      $_SESSION['last_listing_retrieval'] < time() - $GLOBALS['cache_expire_seconds']) {
-    $results = $api->GetMyListings(array(
-      '_limit'   => 10,
-      '_expand'  => 'PrimaryPhoto',
-      '_orderby' => '-ModificationTimestamp'
-    ));
-    $_SESSION['listings'] = $results;
-  }
-  return $_SESSION['listings'];
+  $results = $api->GetMyListings(array(
+    '_limit'   => 10,
+    '_expand'  => 'PrimaryPhoto',
+    '_orderby' => '-ModificationTimestamp'
+  ));
+  return $results;
 }
 
 function listing_img_tag($listing) {
