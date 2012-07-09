@@ -7,10 +7,10 @@
   //  No session yet, and no authorization by the end user to access their data...
   if( $access_token == '') {
     /* 
-       Send them off to Spark API's OAuth 2 endpoint.
+       Send them off to Spark API's OpenId/OAuth2 endpoint.
        We'll see the end user again in callback.php.
     */
-    header('Location: ' . oauth2_endpoint_uri($api));
+    header('Location: ' . $api->authentication_endpoint_uri());
     exit();
   }
   else {

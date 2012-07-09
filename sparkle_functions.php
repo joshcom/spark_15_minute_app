@@ -6,15 +6,10 @@ $GLOBALS['client_id']     = "<YOUR OAUTH2 CLIENT KEY>";
 $GLOBALS['client_secret'] = "<YOUR OAUTH2 CLIENT SECRET>";
 $GLOBALS['redirect_uri']  = "<THE URL TO callback.php>";
 
-$api = new SparkAPI_OAuth($GLOBALS['client_id'], $GLOBALS['client_secret'], $GLOBALS['redirect_uri']);
+$api = new SparkAPI_Hybrid($GLOBALS['client_id'], $GLOBALS['client_secret'], $GLOBALS['redirect_uri']);
 
 // Let's identify our new application.
 $api->SetApplicationName("PHP-APP-In-Fifteen-Minutes/1.0");
-
-function oauth2_endpoint_uri() {
-  return "https://sparkplatform.com/oauth2?response_type=code&client_id=".
-         $GLOBALS['client_id']."&redirect_uri=".urlencode($GLOBALS['redirect_uri']);
-}
 
 function get_user_name($api) {
   if ($_SESSION['name'] == '') {
