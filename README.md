@@ -1,7 +1,7 @@
 Spark API 15 Minute Application
 ===============================
 
-A simple "10 most recently updated listings" webapp built on [Spark API].  This project is intended for educational purposes, rather than production deployment.
+A simple "10 most recently updated listings" web app built on [Spark API].  This project is intended for educational purposes, rather than production deployment.
 
 Requirements
 ------------
