@@ -45,7 +45,11 @@ class SparkAPI_MySQLiCache implements SparkAPI_CacheInterface {
 		if ($result = $this->conn->query($sql)) {
 			$row = $result->fetch_assoc();
 			if ($row !== null) {
-				return unserialize($row['cache_value']);
+				if(!$return = unserialize($row['cache_value'])){
+					return null;
+				} else {
+					return $return;
+				}
 			}
 		}
 
@@ -75,14 +79,14 @@ class SparkAPI_MySQLiCache implements SparkAPI_CacheInterface {
 	}
 
 	function check_gc() {
-		$random_number = rand(1, 1000);
+		$random_number = rand(1, 100);
 		if ($random_number === 1) {
 			$this->gc();
 		}
 	}
 
 	function gc() {
-		return $this->conn->query("DELETE FROM `". $this->table_name ."` WHERE `expiration` < unit_timestamp()");
+		return $this->conn->query("DELETE FROM `". $this->table_name ."` WHERE `expiration` < unix_timestamp()");
 	}
 
 
