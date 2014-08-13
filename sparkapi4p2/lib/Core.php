@@ -31,15 +31,20 @@ spl_autoload_register(array('SparkAPI_Core', 'autoload'));
 
 class SparkAPI_Core {
 	const DEFAULT_API_BASE = "sparkapi.com";
-	const DEVELOPERS_API_BASE = "developers.sparkapi.com";
+	const DEFAULT_PLATFORM_BASE = "sparkplatform.com";
 
+  /* 
+    We'll no longer advertise a seperate domain for development,
+    but will keep the logic around for backwards compat.
+   */
+	const DEVELOPERS_API_BASE = "sparkapi.com";
+	
 	public $api_client_version = '2.0';
 
 	public $api_base = self::DEFAULT_API_BASE;
+	public $platform_base = self::DEFAULT_PLATFORM_BASE;
 	public $api_version = "v1";
-
-	private $debug_mode = false;
-	private $debug_log = null;
+	
 	protected $developer_mode = false;
 	protected $force_https = false;
 	protected $transport = null;
@@ -57,6 +62,8 @@ class SparkAPI_Core {
 	public $total_pages = null;
 	public $current_page = null;
 	public $page_size = null;
+
+	public $last_updated = null;
 
 	public $last_error_code = null;
 	public $last_error_mess = null;
@@ -80,10 +87,6 @@ class SparkAPI_Core {
 
 	function SetApplicationName($name) {
 		$this->SetHeader('X-SparkApi-User-Agent', str_replace(array("\r", "\r\n", "\n"), '', trim($name)));
-	}
-
-	function SetDebugMode($mode = false) {
-		$this->debug_mode = $mode;
 	}
 
 	function SetDeveloperMode($enable = false) {
@@ -119,11 +122,7 @@ class SparkAPI_Core {
 		$this->cache_prefix = $prefix;
 		return true;
 	}
-
-	function Log($message) {
-		$this->debug_log .= $message . PHP_EOL;
-	}
-
+	
 	function SetHeader($key, $value) {
 		$this->headers[$key] = $value;
 		return true;
@@ -149,9 +148,9 @@ class SparkAPI_Core {
 		$tag = substr($val, -1);
 		$time = substr($val, 0, -1);
 
-		if (empty($time)) {
-			// no trailing identifier given so assuming that what was given was in seconds
-			$time = $val;
+		// Assume seconds if no valid tag is passed.
+		if (!preg_match('/[wdhm]/', $tag)) {
+			return $val;
 		}
 
 		switch ($tag) {
@@ -217,16 +216,13 @@ class SparkAPI_Core {
 		}
 	}
 
-
 	/*
 	 * API services
 	 */
 
 	function MakeAPICall($method, $service, $cache_time = 0, $params = array(), $post_data = null, $a_retry = false) {
 	
-		// reset last error code
-		$this->last_error_code = false;
-		$this->last_error_mess = false;
+		$this->ResetErrors();
 
 		if ($this->transport == null) {
 			$this->SetTransport(new SparkAPI_CurlTransport);
@@ -259,7 +255,6 @@ class SparkAPI_Core {
 
 		if ($served_from_cache !== true) {
 			$response = $this->transport->make_request($request);
-			$response = $this->utf8_encode_mix($response);
 		}
 
 		$json = json_decode($response['body'], true);
@@ -270,6 +265,11 @@ class SparkAPI_Core {
 
 		if (!is_array($json)) {
 			// the response wasn't JSON as expected so bail out with the original, unparsed body
+			$this->SetErrors(null, "Invalid response body format - Expected JSON \n" . $response['body']);
+			
+			$this->Log($this->GetErrors());
+			$this->ResetErrors();
+			
 			$return['body'] = $response['body'];
 			return $return;
 		}
@@ -290,17 +290,29 @@ class SparkAPI_Core {
 				$this->page_size = $json['D']['Pagination']['PageSize'];
 				$this->total_pages = $json['D']['Pagination']['TotalPages'];
 				$this->current_page = $json['D']['Pagination']['CurrentPage'];
-			}
-			else {
+			} else {
 				$this->last_count = null;
 				$this->page_size = null;
 				$this->total_pages = null;
 				$this->current_page = null;
 			}
 
+			if (array_key_exists('LastUpdated', $json['D'])) {
+				$this->last_updated = $json['D']['LastUpdated'];
+				$return['last_updated'] = $json['D']['LastUpdated'];
+			} else {
+				$this->last_updated = null;
+			}
+
+
 			if ($json['D']['Success'] == true) {
 				$return['success'] = true;
-				$return['results'] = $json['D']['Results'];
+        if (array_key_exists('Results', $json['D'])) {
+          $return['results'] = $json['D']['Results'];
+        }
+        else {
+          $return['results'] = array();
+        }
 			}
 			else {
 				$return['success'] = false;
@@ -316,8 +328,7 @@ class SparkAPI_Core {
 		if (array_key_exists('error', $json)) {
 			// looks like a failed OAuth grant response
 			$return['success'] = false;
-			$this->last_error_code = $json['error'];
-			$this->last_error_mess = $json['error_description'];
+			$this->SetErrors($json['error'], $json['error_description']);
 		}
 
 		if ($return['success'] == true and $served_from_cache != true and $method == "GET" and $seconds_to_cache > 0) {
@@ -338,6 +349,9 @@ class SparkAPI_Core {
 			}
 		}
 
+		$this->Log($this->GetErrors());
+		$this->ResetErrors();
+		
 		return $return;
 
 	}
@@ -433,8 +447,8 @@ class SparkAPI_Core {
 		return $this->return_all_results($this->MakeAPICall("GET", "accounts/by/office/" . $id, '1h', $params));
 	}
 
-	function GetMyAccount() {
-		return $this->return_first_result($this->MakeAPICall("GET", "my/account", '1h'));
+	function GetMyAccount($params = array()) {
+		return $this->return_first_result($this->MakeAPICall("GET", "my/account", '1h', $params));
 	}
 
 	function UpdateMyAccount($data) {
@@ -561,12 +575,6 @@ class SparkAPI_Core {
 
 
 	/*
-	 * Shared Listings services
-	 * TODO
-	 */
-
-
-	/*
 	 * IDX Links services
 	 */
 
@@ -649,10 +657,19 @@ class SparkAPI_Core {
 	 * Custom Fields services
 	 */
 
-	function GetCustomFields($prop_type) {
-		return $this->return_all_results($this->MakeAPICall("GET", "customfields/" . $prop_type, '24h'));
+	function GetCustomFields() {
+		return $this->return_all_results($this->MakeAPICall("GET", "customfields", '24h'));
 	}
 
+	function GetCustomFieldList($field) {
+		$data = $this->return_first_result($this->MakeAPICall("GET", "customfields/" . rawurlencode($field), '24h'));
+		if ($data && array_key_exists('FieldList', $data[$field]) ) {
+			return $data[$field]['FieldList'];
+		}
+		else {
+			return array();
+		}
+	}
 
 	/*
 	 * System Info services
@@ -665,6 +682,16 @@ class SparkAPI_Core {
 	/*
 	 * Error services
 	 */
+	 
+	function SetErrors($code, $message) {
+		$this->last_error_code = $code;
+		$this->last_error_mess = $message;
+	}
+
+	function ResetErrors() {
+		$this->last_error_code = false;
+		$this->last_error_mess = false;
+	}
 
 	function GetErrors() {
 		if ($this->last_error_code || $this->last_error_mess){
@@ -673,5 +700,150 @@ class SparkAPI_Core {
 			return false;
 		}
 	}	
+	
+	function Log($message) {
+		if (ini_get('log_errors') == true && $message){
+			error_log("Spark Api Client/" . $this->api_client_version . ' - ' . $message, 0);
+			
+			return true;
+		} else {
+			return false;
+		}
+	}
+	
+	
+
+	/**
+	 * Performs a GET request to Spark API.  Wraps MakeAPIRequest.
+	 * @param  $options  An array with the following potential attributes:
+	 *                     'cache_time' => The time, either in seconds or in the format
+	 *                                     specified by parse_cache_time, to cache the response.
+	 *                     'parameters' => The array of request parameters to send along with
+	 *                                     the request.
+	 * @return array An array from the parsed JSON response.  This will typically be in the format:
+	 *                    'success' => true if the response was successful
+	 *                    'results' => An array of the "Results" attribute
+	 *               If success is false, consult $this->GetErrors().
+	 */
+	function get($service, $options = array()) {
+		return $this->wrapped_api_call('GET', $service, $options);
+	}
+
+	/**
+	 * Performs a POST request to Spark API.  Wraps MakeAPIRequest.
+	 * @param  $options  An array with the following potential attributes:
+	 *                     'cache_time' => The time, either in seconds or in the format
+	 *                                     specified by parse_cache_time, to cache the response.
+	 *                     'parameters' => The array of request parameters to send along with
+	 *                                     the request.
+	 *                     'data'       => The POST data, as an array that will be later translated
+	 *                                     to JSON.  Ignore the "D" attribute -- we will wrap the data
+	 *                                     with the "D" attribute for you.
+	 * @return array An array from the parsed JSON response.  This will typically be in the format:
+	 *                    'success' => true if the response was successful
+	 *                    'results' => An array of the "Results" attribute
+	 *               If success is false, consult $this->GetErrors().
+	 */
+	function post($service, $options = array()) {
+		return $this->wrapped_api_call('POST', $service, $options);
+	}
+
+	/**
+	 * Performs a PUT request to Spark API.  Wraps MakeAPIRequest.
+	 * @param  $options  An array with the following potential attributes:
+	 *                     'cache_time' => The time, either in seconds or in the format
+	 *                                     specified by parse_cache_time, to cache the response.
+	 *                     'parameters' => The array of request parameters to send along with
+	 *                                     the request.
+	 *                     'data'       => The PUT data, as an array that will be later translated
+	 *                                     to JSON.  Ignore the "D" attribute -- we will wrap the data
+	 *                                     with the "D" attribute for you.
+	 * @return array An array from the parsed JSON response.  This will typically be in the format:
+	 *                    'success' => true if the response was successful
+	 *                    'results' => An array of the "Results" attribute
+	 *               If success is false, consult $this->GetErrors().
+	 */
+	function put($service, $options = array()) {
+		return $this->wrapped_api_call('PUT', $service, $options);
+	}
+
+	/**
+	 * Performs a DELETE request to Spark API.  Wraps MakeAPIRequest.
+	 * @param  $options  An array with the following potential attributes:
+	 *                     'cache_time' => The time, either in seconds or in the format
+	 *                                     specified by parse_cache_time, to cache the response.
+	 *                     'parameters' => The array of request parameters to send along with
+	 *                                     the request.
+	 * @return array An array from the parsed JSON response.  This will typically be in the format:
+	 *                    'success' => true if the response was successful
+	 *                    'results' => An array of the "Results" attribute
+	 *               If success is false, consult $this->GetErrors().
+	 */
+	function delete($service, $options = array()) {
+		return $this->wrapped_api_call('DELETE', $service, $options);
+	}
+
+	function GetSparkBarToken($access_token) {
+
+		$this->ResetErrors();
+
+		if ($this->transport == null) {
+			$this->SetTransport(new SparkAPI_CurlTransport);
+		}
+
+		$spark_bar_headers = $this->headers;
+		unset($spark_bar_headers["Content-Type"]);
+
+		$request = array(
+			'protocol' => 'https',
+			'method' => 'POST',
+			'uri' => '/appbar/authorize',
+			'host' => $this->platform_base,
+			'headers' => $spark_bar_headers,
+			'post_data' => array("access_token" => $access_token)
+		);
+
+		$response = $this->transport->make_request($request);
+		$json = json_decode($response['body'], true);
+
+		if (!is_array($json)) {
+			return $this->SetErrors(null, "An unknown error occurred when retrieving your sparkbar token.");
+		}
+
+		$token = null;
+		if (array_key_exists('success', $json)) {
+			if ($json['success'] == True) {
+				$token = $json["token"];
+			}
+			else {
+				return $this->SetErrors(null, $json['error']);
+			}
+		}
+
+		return $token;
+	}
+
+	protected function extract_from_request_options($key, $options=array(), $default) {
+		if (array_key_exists($key, $options)) {
+			return $options[$key];
+		}
+		else {
+			return $default;
+		}
+	}
+
+	protected function wrapped_api_call($method, $service, $options) {
+		$cache_time = $this->extract_from_request_options('cache_time', $options, 0);
+		$params     = $this->extract_from_request_options('parameters', $options, array());
+		$post_data  = $this->extract_from_request_options('data',       $options, null);
+		$a_retry    = $this->extract_from_request_options('retry',      $options, false);
+
+		if ($post_data) {
+			$post_data = $this->make_sendable_body($post_data);
+		}
+		$service = trim($service, "/ ");
+
+		return $this->MakeAPICall($method, $service, $cache_time, $params, $post_data, $a_retry);
+	}
 
 }
